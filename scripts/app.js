@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-APP.Main = (function() {
+APP.Main = (function () {
 
   var LAZY_LOAD_THRESHOLD = 300;
   var $ = document.querySelector.bind(document);
@@ -49,11 +49,11 @@ APP.Main = (function() {
   }
 
   var storyTemplate =
-      Handlebars.compile(tmplStory);
+    Handlebars.compile(tmplStory);
   var storyDetailsTemplate =
-      Handlebars.compile(tmplStoryDetails);
+    Handlebars.compile(tmplStoryDetails);
   var storyDetailsCommentTemplate =
-      Handlebars.compile(tmplStoryDetailsComment);
+    Handlebars.compile(tmplStoryDetailsComment);
 
   /**
    * As every single story arrives in shove its
@@ -61,7 +61,7 @@ APP.Main = (function() {
    * that should really be handled more delicately, and
    * probably in a requestAnimationFrame callback.
    */
-  function onStoryData (key, details) {
+  function onStoryData(key, details) {
 
     // This seems odd. Surely we could just select the story
     // directly rather than looping through all of them.
@@ -114,7 +114,8 @@ APP.Main = (function() {
       var storyDetailsHtml = storyDetailsTemplate(details);
       var kids = details.kids;
       var commentHtml = storyDetailsCommentTemplate({
-        by: '', text: 'Loading comment...'
+        by: '',
+        text: 'Loading comment...'
       });
 
       storyDetails = document.createElement('section');
@@ -146,15 +147,15 @@ APP.Main = (function() {
         commentsElement.appendChild(comment);
 
         // Update the comment with the live data.
-        APP.Data.getStoryComment(kids[k], function(commentDetails) {
+        APP.Data.getStoryComment(kids[k], function (commentDetails) {
 
           commentDetails.time *= 1000;
 
           var comment = commentsElement.querySelector(
-              '#sdc-' + commentDetails.id);
+            '#sdc-' + commentDetails.id);
           comment.innerHTML = storyDetailsCommentTemplate(
-              commentDetails,
-              localeData);
+            commentDetails,
+            localeData);
         });
       }
     }
@@ -177,7 +178,7 @@ APP.Main = (function() {
     document.body.classList.add('details-active');
     storyDetails.style.opacity = 1;
 
-    function animate () {
+    function animate() {
 
       // Find out where it currently is.
       var storyDetailsPosition = storyDetails.getBoundingClientRect();
@@ -218,7 +219,7 @@ APP.Main = (function() {
     document.body.classList.remove('details-active');
     storyDetails.style.opacity = 0;
 
-    function animate () {
+    function animate() {
 
       // Find out where it currently is.
       var mainPosition = main.getBoundingClientRect();
@@ -249,43 +250,73 @@ APP.Main = (function() {
   }
 
   /**
-   * Does this really add anything? Can we do this kind
-   * of work in a cheaper way?
+   * OPTIMIZATIONS:
+   * 1) Batch all queries and update styles separately
+   * 2) Only update stories that are within visible story area
    */
   function colorizeAndScaleStories() {
 
     var storyElements = document.querySelectorAll('.story');
+    var storyStyles = [];
 
     // It does seem awfully broad to change all the
     // colors every time!
     for (var s = 0; s < storyElements.length; s++) {
-
       var story = storyElements[s];
       var score = story.querySelector('.story__score');
       var title = story.querySelector('.story__title');
 
       // Base the scale on the y position of the score.
-      var height = main.offsetHeight;
-      var mainPosition = main.getBoundingClientRect();
+      var height = main.offsetHeight; // story area height
+      var mainPosition = main.getBoundingClientRect(); // story area border box
       var scoreLocation = score.getBoundingClientRect().top -
-          document.body.getBoundingClientRect().top;
+        document.body.getBoundingClientRect().top;
       var scale = Math.min(1, 1 - (0.05 * ((scoreLocation - 170) / height)));
       var opacity = Math.min(1, 1 - (0.5 * ((scoreLocation - 170) / height)));
 
-      score.style.width = (scale * 40) + 'px';
-      score.style.height = (scale * 40) + 'px';
-      score.style.lineHeight = (scale * 40) + 'px';
+      // score.style.width = (scale * 40) + 'px';
+      // score.style.height = (scale * 40) + 'px';
+      // score.style.lineHeight = (scale * 40) + 'px';
 
       // Now figure out how wide it is and use that to saturate it.
       scoreLocation = score.getBoundingClientRect();
       var saturation = (100 * ((scoreLocation.width - 38) / 2));
 
-      score.style.backgroundColor = 'hsl(42, ' + saturation + '%, 50%)';
-      title.style.opacity = opacity;
+      // score.style.backgroundColor = 'hsl(42, ' + saturation + '%, 50%)';
+      // title.style.opacity = opacity;
+
+      // Save scale, saturation and opacity for this story
+      // Save all 0's if story is not within visible story
+      if (score.getBoundingClientRect().bottom >= main.getBoundingClientRect().top && score.getBoundingClientRect().top <= main.getBoundingClientRect().bottom) {
+        storyStyles.push({
+          'scale': scale,
+          'saturation': saturation,
+          'opacity': opacity
+        })
+      } else {
+        storyStyles.push({
+          'scale': 0,
+          'saturation': 0,
+          'opacity': 0
+        })
+      }
+    }
+    for (var s = 0; s < storyElements.length; s++) {
+      if (storyStyles[s].opacity != 0) {
+        var story = storyElements[s];
+        var score = story.querySelector('.story__score');
+        var title = story.querySelector('.story__title');
+
+        score.style.width = (storyStyles[s].scale * 40) + 'px';
+        score.style.height = (storyStyles[s].scale * 40) + 'px';
+        score.style.lineHeight = (storyStyles[s].scale * 40) + 'px';
+        score.style.backgroundColor = 'hsl(42, ' + storyStyles[s].saturation + '%, 50%)';
+        title.style.opacity = storyStyles[s].opacity;
+      }
     }
   }
 
-  main.addEventListener('touchstart', function(evt) {
+  main.addEventListener('touchstart', function (evt) {
 
     // I just wanted to test what happens if touchstart
     // gets canceled. Hope it doesn't block scrolling on mobiles...
@@ -295,7 +326,7 @@ APP.Main = (function() {
 
   });
 
-  main.addEventListener('scroll', function() {
+  main.addEventListener('scroll', function () {
 
     var header = $('header');
     var headerTitles = header.querySelector('.header__title-wrapper');
@@ -316,7 +347,7 @@ APP.Main = (function() {
 
     // Check if we need to load the next batch of stories.
     var loadThreshold = (main.scrollHeight - main.offsetHeight -
-        LAZY_LOAD_THRESHOLD);
+      LAZY_LOAD_THRESHOLD);
     if (main.scrollTop > loadThreshold)
       loadStoryBatch();
   });
@@ -354,7 +385,7 @@ APP.Main = (function() {
   }
 
   // Bootstrap in the stories.
-  APP.Data.getTopStories(function(data) {
+  APP.Data.getTopStories(function (data) {
     stories = data;
     loadStoryBatch();
     main.classList.remove('loading');
