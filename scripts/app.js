@@ -25,6 +25,7 @@ APP.Main = (function () {
   var main = $('main');
   var inDetails = false;
   var storyLoadCount = 0;
+  var storyLoadIndex = 0; // OPTIMIZATION: used to avoid looping in onStoryData
   var localeData = {
     data: {
       intl: {
@@ -67,22 +68,25 @@ APP.Main = (function () {
     // directly rather than looping through all of them.
     var storyElements = document.querySelectorAll('.story');
 
-    for (var i = 0; i < storyElements.length; i++) {
+    //OPTIMIZATION: avoid looping and use storyLoadIndex
+    // for (var i = 0; i < storyElements.length; i++) {
 
-      if (storyElements[i].getAttribute('id') === 's-' + key) {
+    // if (storyElements[i].getAttribute('id') === 's-' + key) {
 
-        details.time *= 1000;
-        var story = storyElements[i];
-        var html = storyTemplate(details);
-        story.innerHTML = html;
-        story.addEventListener('click', onStoryClick.bind(this, details));
-        story.classList.add('clickable');
+    details.time *= 1000;
+    //OPTIMIZATION: use a global index to directly access story
+    var story = storyElements[storyLoadIndex];
+    var html = storyTemplate(details);
+    story.innerHTML = html;
+    story.addEventListener('click', onStoryClick.bind(this, details));
+    story.classList.add('clickable');
 
-        // Tick down. When zero we can batch in the next load.
-        storyLoadCount--;
+    // Tick down. When zero we can batch in the next load.
+    storyLoadCount--;
+    storyLoadIndex++;
 
-      }
-    }
+    // }
+    // }
 
     // Colorize on complete.
     if (storyLoadCount === 0)
@@ -255,65 +259,66 @@ APP.Main = (function () {
    * 2) Only update stories that are within visible story area
    */
   function colorizeAndScaleStories() {
-
+    // OPTIMIZATION: move all constant queries outside loop
     var storyElements = document.querySelectorAll('.story');
     var storyStyles = [];
+    var mainPosition = main.getBoundingClientRect(); // story area border box
+    var height = main.offsetHeight; // story area height
+    var bodyPosition = document.body.getBoundingClientRect();
 
     // It does seem awfully broad to change all the
     // colors every time!
-    for (var s = 0; s < storyElements.length; s++) {
-      var story = storyElements[s];
-      var score = story.querySelector('.story__score');
-      var title = story.querySelector('.story__title');
-
-      // Base the scale on the y position of the score.
-      var height = main.offsetHeight; // story area height
-      var mainPosition = main.getBoundingClientRect(); // story area border box
-      var scoreLocation = score.getBoundingClientRect().top -
-        document.body.getBoundingClientRect().top;
-      var scale = Math.min(1, 1 - (0.05 * ((scoreLocation - 170) / height)));
-      var opacity = Math.min(1, 1 - (0.5 * ((scoreLocation - 170) / height)));
-
-      // score.style.width = (scale * 40) + 'px';
-      // score.style.height = (scale * 40) + 'px';
-      // score.style.lineHeight = (scale * 40) + 'px';
-
-      // Now figure out how wide it is and use that to saturate it.
-      scoreLocation = score.getBoundingClientRect();
-      var saturation = (100 * ((scoreLocation.width - 38) / 2));
-
-      // score.style.backgroundColor = 'hsl(42, ' + saturation + '%, 50%)';
-      // title.style.opacity = opacity;
-
-      // Save scale, saturation and opacity for this story
-      // Save all 0's if story is not within visible story
-      if (score.getBoundingClientRect().bottom >= main.getBoundingClientRect().top && score.getBoundingClientRect().top <= main.getBoundingClientRect().bottom) {
-        storyStyles.push({
-          'scale': scale,
-          'saturation': saturation,
-          'opacity': opacity
-        })
-      } else {
-        storyStyles.push({
-          'scale': 0,
-          'saturation': 0,
-          'opacity': 0
-        })
-      }
-    }
-    for (var s = 0; s < storyElements.length; s++) {
-      if (storyStyles[s].opacity != 0) {
+    function calculateStyles() {
+      for (var s = 0; s < storyElements.length; s++) {
         var story = storyElements[s];
         var score = story.querySelector('.story__score');
         var title = story.querySelector('.story__title');
 
-        score.style.width = (storyStyles[s].scale * 40) + 'px';
-        score.style.height = (storyStyles[s].scale * 40) + 'px';
-        score.style.lineHeight = (storyStyles[s].scale * 40) + 'px';
-        score.style.backgroundColor = 'hsl(42, ' + storyStyles[s].saturation + '%, 50%)';
-        title.style.opacity = storyStyles[s].opacity;
+        // Base the scale on the y position of the score.
+        var scorePosition = score.getBoundingClientRect(); // score border box
+        var scoreLocation = scorePosition.top - bodyPosition.top;
+        var scale = Math.min(1, 1 - (0.05 * ((scoreLocation - 170) / height)));
+        var opacity = Math.min(1, 1 - (0.5 * ((scoreLocation - 170) / height)));
+
+        // Now figure out how wide it is and use that to saturate it.
+        var saturation = (100 * ((scorePosition.width - 38) / 2));
+
+        // Save scale, saturation and opacity for this story
+        // Save all 0's if story is not within visible area
+        if (scorePosition.bottom >= mainPosition.top && scorePosition.top <= mainPosition.bottom) {
+          storyStyles.push({
+            'scale': scale,
+            'saturation': saturation,
+            'opacity': opacity
+          })
+        } else {
+          storyStyles.push({
+            'scale': 0,
+            'saturation': 0,
+            'opacity': 0
+          })
+        }
       }
     }
+    calculateStyles();
+    // Only apply styles for visible stories
+    // Indicated by non-zero opacity value
+    function applyStyles() {
+      for (var s = 0; s < storyElements.length; s++) {
+        if (storyStyles[s].opacity != 0) {
+          var story = storyElements[s];
+          var score = story.querySelector('.story__score');
+          var title = story.querySelector('.story__title');
+
+          score.style.width = (storyStyles[s].scale * 40) + 'px';
+          score.style.height = (storyStyles[s].scale * 40) + 'px';
+          score.style.lineHeight = (storyStyles[s].scale * 40) + 'px';
+          score.style.backgroundColor = 'hsl(42, ' + storyStyles[s].saturation + '%, 50%)';
+          title.style.opacity = storyStyles[s].opacity;
+        }
+      }
+    }
+    applyStyles();
   }
 
   main.addEventListener('touchstart', function (evt) {
@@ -349,17 +354,18 @@ APP.Main = (function () {
     var loadThreshold = (main.scrollHeight - main.offsetHeight -
       LAZY_LOAD_THRESHOLD);
     if (main.scrollTop > loadThreshold)
-      loadStoryBatch();
+      loadStoryBatch(count);
   });
 
-  function loadStoryBatch() {
+  // OPTIMIZATION: take batchCount as parameter to allow a small initial batch
+  function loadStoryBatch(batchCount) {
 
     if (storyLoadCount > 0)
       return;
 
-    storyLoadCount = count;
+    storyLoadCount = batchCount;
 
-    var end = storyStart + count;
+    var end = storyStart + batchCount;
     for (var i = storyStart; i < end; i++) {
 
       if (i >= stories.length)
@@ -380,14 +386,15 @@ APP.Main = (function () {
       APP.Data.getStoryById(stories[i], onStoryData.bind(this, key));
     }
 
-    storyStart += count;
+    storyStart += batchCount;
 
   }
 
   // Bootstrap in the stories.
   APP.Data.getTopStories(function (data) {
     stories = data;
-    loadStoryBatch();
+    // OPTIMIZATION: load a small initial batch
+    loadStoryBatch(20);
     main.classList.remove('loading');
   });
 
