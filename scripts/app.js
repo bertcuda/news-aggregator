@@ -25,7 +25,6 @@ APP.Main = (function () {
   var main = $('main');
   var inDetails = false;
   var storyLoadCount = 0;
-  var storyLoadIndex = 0; // OPTIMIZATION: used to avoid looping in onStoryData
   var localeData = {
     data: {
       intl: {
@@ -64,33 +63,39 @@ APP.Main = (function () {
    */
   function onStoryData(key, details) {
 
-    // This seems odd. Surely we could just select the story
-    // directly rather than looping through all of them.
-    var storyElements = document.querySelectorAll('.story');
+    function appendNextStory() {
+      // var storyElements = document.querySelectorAll('.story');
 
-    //OPTIMIZATION: avoid looping and use storyLoadIndex
-    // for (var i = 0; i < storyElements.length; i++) {
+      // This seems odd. Surely we could just select the story
+      // directly rather than looping through all of them.
 
-    // if (storyElements[i].getAttribute('id') === 's-' + key) {
+      // for (var i = 0; i < storyElements.length; i++) {
 
-    details.time *= 1000;
-    //OPTIMIZATION: use a global index to directly access story
-    var story = storyElements[storyLoadIndex];
-    var html = storyTemplate(details);
-    story.innerHTML = html;
-    story.addEventListener('click', onStoryClick.bind(this, details));
-    story.classList.add('clickable');
+      // if (storyElements[i].getAttribute('id') === 's-' + key) {
 
-    // Tick down. When zero we can batch in the next load.
-    storyLoadCount--;
-    storyLoadIndex++;
+      // console.log(key, details);
 
-    // }
-    // }
+      details.time *= 1000;
+      //OPTIMIZATION: avoid looping and use key to query for story
+      var story = document.querySelector("#s-" + key);
+      var html = storyTemplate(details);
+      story.innerHTML = html;
+      story.addEventListener('click', onStoryClick.bind(this, details));
+      story.classList.add('clickable');
 
-    // Colorize on complete.
-    if (storyLoadCount === 0)
-      colorizeAndScaleStories();
+      // Tick down. When zero we can batch in the next load.
+      storyLoadCount--;
+
+      // console.log("key: ", key, "details: ", details, "storyLoadCount: ", storyLoadCount, "story: ", story);
+      // }
+      // }
+
+      // Colorize on complete.
+      if (storyLoadCount === 0)
+        colorizeAndScaleStories();
+    }
+
+    requestAnimationFrame(appendNextStory);
   }
 
   function onStoryClick(details) {
@@ -98,7 +103,8 @@ APP.Main = (function () {
     var storyDetails = $('sd-' + details.id);
 
     // Wait a little time then show the story details.
-    setTimeout(showStory.bind(this, details.id), 60);
+    // OPTIMIZATION: reduce timeout from 60 to 1
+    setTimeout(showStory.bind(this, details.id), 1);
 
     // Create and append the story. A visual change...
     // perhaps that should be in a requestAnimationFrame?
@@ -142,6 +148,7 @@ APP.Main = (function () {
       if (typeof kids === 'undefined')
         return;
 
+      // for (var k = 0; k < 10; k++) {
       for (var k = 0; k < kids.length; k++) {
 
         comment = document.createElement('aside');
@@ -196,7 +203,9 @@ APP.Main = (function () {
 
       // Set up the next bit of the animation if there is more to do.
       if (Math.abs(left) > 0.5)
-        setTimeout(animate, 4);
+      // setTimeout(animate, 4);
+      // OPTIMIZATION: use requestAnimationFrame
+        requestAnimationFrame(animate);
       else
         left = 0;
 
@@ -209,7 +218,9 @@ APP.Main = (function () {
     // every few milliseconds. That's going to keep
     // it all tight. Or maybe we're doing visual changes
     // and they should be in a requestAnimationFrame
-    setTimeout(animate, 4);
+    // setTimeout(animate, 4);
+    // OPTIMIZATION: use requestAnimationFrame
+    requestAnimationFrame(animate);
   }
 
   function hideStory(id) {
@@ -235,7 +246,9 @@ APP.Main = (function () {
 
       // Set up the next bit of the animation if there is more to do.
       if (Math.abs(left - target) > 0.5) {
-        setTimeout(animate, 4);
+        // OPTIMIZATION: use requestAnimationFrame
+        // setTimeout(animate, 4);
+        requestAnimationFrame(animate);
       } else {
         left = target;
         inDetails = false;
@@ -250,38 +263,44 @@ APP.Main = (function () {
     // every few milliseconds. That's going to keep
     // it all tight. Or maybe we're doing visual changes
     // and they should be in a requestAnimationFrame
-    setTimeout(animate, 4);
+    requestAnimationFrame(animate);
   }
 
   /**
    * OPTIMIZATIONS:
    * 1) Batch all queries and update styles separately
    * 2) Only update stories that are within visible story area
+   * 3) Calculate scale, saturation and opacity numerically
    */
   function colorizeAndScaleStories() {
     // OPTIMIZATION: move all constant queries outside loop
     var storyElements = document.querySelectorAll('.story');
     var storyStyles = [];
     var mainPosition = main.getBoundingClientRect(); // story area border box
-    var height = main.offsetHeight; // story area height
-    var bodyPosition = document.body.getBoundingClientRect();
+    // var height = main.offsetHeight;
+    // var bodyPosition = document.body.getBoundingClientRect();
 
     // It does seem awfully broad to change all the
     // colors every time!
     function calculateStyles() {
+      // Just calculate these numerically without queries
+      var saturation = 100;
+      var scale = opacity = 1.0;
+
       for (var s = 0; s < storyElements.length; s++) {
         var story = storyElements[s];
         var score = story.querySelector('.story__score');
-        var title = story.querySelector('.story__title');
 
         // Base the scale on the y position of the score.
         var scorePosition = score.getBoundingClientRect(); // score border box
-        var scoreLocation = scorePosition.top - bodyPosition.top;
-        var scale = Math.min(1, 1 - (0.05 * ((scoreLocation - 170) / height)));
-        var opacity = Math.min(1, 1 - (0.5 * ((scoreLocation - 170) / height)));
+        // var scoreLocation = scorePosition.top - bodyPosition.top;
+        // OPTIMIZATION: don't use queries to calculate
+        // var scale = Math.min(1, 1 - (0.05 * ((scoreLocation - 170) / height)));
+        // var opacity = Math.min(1, 1 - (0.5 * ((scoreLocation - 170) / height)));
 
         // Now figure out how wide it is and use that to saturate it.
-        var saturation = (100 * ((scorePosition.width - 38) / 2));
+        // OPTIMIZATION: just calculate numerically
+        // var saturation = (100 * ((scorePosition.width - 38) / 2));
 
         // Save scale, saturation and opacity for this story
         // Save all 0's if story is not within visible area
@@ -290,26 +309,29 @@ APP.Main = (function () {
             'scale': scale,
             'saturation': saturation,
             'opacity': opacity
-          })
+          });
+          saturation -= 8;
+          scale -= 0.025;
+          opacity -= 0.05;
         } else {
           storyStyles.push({
             'scale': 0,
             'saturation': 0,
             'opacity': 0
-          })
+          });
         }
       }
     }
     calculateStyles();
+
     // Only apply styles for visible stories
-    // Indicated by non-zero opacity value
+    // Indicated by non-zero values
     function applyStyles() {
       for (var s = 0; s < storyElements.length; s++) {
         if (storyStyles[s].opacity != 0) {
           var story = storyElements[s];
           var score = story.querySelector('.story__score');
           var title = story.querySelector('.story__title');
-
           score.style.width = (storyStyles[s].scale * 40) + 'px';
           score.style.height = (storyStyles[s].scale * 40) + 'px';
           score.style.lineHeight = (storyStyles[s].scale * 40) + 'px';
